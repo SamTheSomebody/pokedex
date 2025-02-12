@@ -1,9 +1,5 @@
 package pokeapi
 
-import (
-  "encoding/json"
-)
-
 type NamedData struct {
   Name string `json:"name"`
   URL string `json:"url"`
@@ -25,24 +21,20 @@ type PokemonEncounters struct {
 }
 
 type PokemonData struct {
+  BaseExperience int `json:"base_experience"`
+  Height int `json:"height"`
+  Weight int `json:"weight"`
+  Stats []StatData `json:"stats"`
+  Types []TypeData `json:"types"`
   NamedData
 }
 
-func BytesToLocationData(data []byte) (LocationsData, error) {
-  locations := LocationsData{}
-  err := json.Unmarshal(data, &locations)
-  return locations, err
+type StatData struct{
+  BaseValue int `json:"base_stat"`
+  Stat NamedData `json:"stat"`
 }
 
-func BytesToData[T any](data []byte) (T, error) {
-  var t T
-  err := json.Unmarshal(data, &t)
-  return t, err
+type TypeData struct{
+  Type NamedData `json:"type"`
 }
-
-func LocationDataToBytes(data LocationsData) ([]byte, error) {
-  b, err := json.Marshal(data)
-  return b, err
-}
-
 

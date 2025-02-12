@@ -1,26 +1,37 @@
 package pokeapi 
 
 import (
+  "encoding/json"
   "net/http"
   "errors"
   "fmt"
   "io"
 )
 
-func GetRequest(url string) (*[]byte, error) {
+func GetData[T any](url string, cache *Cache) (T, error) {
+  var t T
+  data, ok := cache.Get(url)
+  if ok { 
+    fmt.Println("[Retrieved data from cache...]")
+    err := json.Unmarshal(data, &t)
+    return t, err
+  }
+  fmt.Println("[Sending get request...]")
+  fmt.Printf("[URL: %v]\n", url)
   res, err := http.Get(url)
   if err != nil {
-    s := fmt.Sprintf("Couldn't complete GET request! Error: %v", err)
-    return nil, errors.New(s)
+    return t, err
   }
   defer res.Body.Close()
-  
   fmt.Printf("[Status: %v]\n", res.StatusCode)
   if res.StatusCode != http.StatusOK {
-    s := fmt.Sprintf("HTTP error! Error: %v", res.Status)
-    return nil, errors.New(s)
+    return t, errors.New(res.Status)
   }
-
-  data, err := io.ReadAll(res.Body)
-  return &data, err
+  data, err = io.ReadAll(res.Body)
+  if err != nil {
+    return t, err
+  }
+  cache.Add(url, data)
+  err = json.Unmarshal(data, &t)
+  return t, err
 }

@@ -4,6 +4,7 @@ import(
   "fmt"
   "os"
   "internal/pokeapi"
+  "math/rand"
 )
 
 type cliCommand struct {
@@ -39,6 +40,16 @@ func getCommands() map[string]cliCommand {
       Description: "Get all of the Pokemon in a location",
       Callback: commandExplore,
     },
+    "catch": {
+      Name: "catch <name>",
+      Description: "Attempt to catch a Pokemon",
+      Callback: commandCatch,
+    },
+    "inspect": {
+      Name: "inspect <name>",
+      Description: "Inspect a caught Pokemon",
+      Callback: commandInspect,
+    },
   }
 }
 
@@ -59,6 +70,11 @@ func commandHelp(cfg *config, prms []string) error {
   return nil
 }
 
+func commandMap(cfg *config, prms []string) error {
+  url := *cfg.NextLocationURL
+  return runCommandMap(url, cfg)
+}
+
 func commandMapBack(cfg *config, prms []string) error {
   if cfg.PreviousLocationURL == nil {
     fmt.Println("you're on the first page")
@@ -68,40 +84,16 @@ func commandMapBack(cfg *config, prms []string) error {
   return runCommandMap(url, cfg)
 }
 
-func commandMap(cfg *config, prms []string) error {
-  url := *cfg.NextLocationURL
-  return runCommandMap(url, cfg)
-}
-
 func runCommandMap(url string, cfg *config) error {
-  data, ok := cfg.Cache.Get(url)
-  if !ok {
-    fmt.Println("[Looking up map area...]")
-    fmt.Printf("[URL: %v]\n", url)
-    pData, err := pokeapi.GetRequest(url) 
-    if err != nil {
-      return err
-    }
-    data = *pData
-    cfg.Cache.Add(url, data)
-  } else {
-    fmt.Println("[Retriving map area from cache...]")
-  }
-
-  fmt.Println("[Converting JSON to structed data...]")
-  locations, err := pokeapi.BytesToData[pokeapi.LocationsData](data)
+  locations, err := pokeapi.GetData[pokeapi.LocationsData](url, cfg.Cache)
   if err != nil {
-    fmt.Errorf("Data:\n\n%v\n\n", data)
     return err
   }
-
   cfg.NextLocationURL = locations.Next
   cfg.PreviousLocationURL = locations.Previous
-
   for _, r := range(locations.Results) {
     fmt.Println(r.Name)
   }
-
   return nil
 }
 
@@ -109,33 +101,63 @@ func commandExplore(cfg *config, prms []string) error {
   if len(prms) == 0 {
     return fmt.Errorf("Missing command parameter! Please include a location")
   }
-
   for _, prm := range(prms) {
     fmt.Printf("[Exploring %v...]\n", prm)
     url := baseLocationURL + prm
-    data, ok := cfg.Cache.Get(url)
-    if !ok {
-      fmt.Println("[Looking up encounters...]")
-      fmt.Printf("[URL: %v]\n", url)
-
-      pData, err := pokeapi.GetRequest(url) 
-      if err != nil {
-        return err
-      }
-
-      data = *pData
-      cfg.Cache.Add(url, data)
-    }
-    
-    fmt.Println("[Converting JSON to structed data...]")
-    location, err := pokeapi.BytesToData[pokeapi.LocationData](data)
+    location, err := pokeapi.GetData[pokeapi.LocationData](url, cfg.Cache)
     if err != nil {
-      fmt.Errorf("Data:\n\n%v\n\n", data)
       return err
     }
-
     for _, r := range(location.Encounters) {
       fmt.Println(r.Pokemon.Name)
+    }
+  }
+  return nil
+}
+
+func commandCatch(cfg *config, prms []string) error {
+  if len(prms) == 0 {
+    return fmt.Errorf("Missing command parameter! Please include a name")
+  }
+  for _, prm := range(prms) {
+    fmt.Printf("Throwing a Pokeball at %v...\n", prm)
+    url := "https://pokeapi.co/api/v2/pokemon/" + prm
+    pokemon, err := pokeapi.GetData[pokeapi.PokemonData](url, cfg.Cache)
+    if err != nil {
+      return err
+    }
+    exp := pokemon.BaseExperience
+    r := rand.Intn(700)
+    if r < exp {
+      fmt.Printf("%v escaped! (%v vs %v)\n", prm, r, exp)
+      return nil
+    }
+    fmt.Printf("%v was caught! (%v vs %v)\n", prm, r, exp)
+    cfg.Pokedex[prm] = pokemon
+  }
+  return nil
+}
+
+func commandInspect(cfg *config, prms []string) error {
+  if len(prms) == 0 {
+    return fmt.Errorf("Missing command parameter! Please include a name")
+  }
+  for _, prm := range(prms) {
+    pokemon, ok := cfg.Pokedex[prm]
+    if !ok {
+      fmt.Println("You have not caught that Pokemon!")
+      return nil
+    }
+    fmt.Printf("Name: %v\n", prm)
+    fmt.Printf("Height: %v\n", pokemon.Height)
+    fmt.Printf("Weight: %v\n", pokemon.Weight)
+    fmt.Println("Stats:")
+    for _, stat := range(pokemon.Stats) {
+      fmt.Printf("  -%v: %v\n", stat.Stat.Name, stat.BaseValue)
+    }
+    fmt.Println("Types:")
+    for _, t := range(pokemon.Types) {
+      fmt.Printf("  -%v\n", t.Type.Name)
     }
   }
   return nil
